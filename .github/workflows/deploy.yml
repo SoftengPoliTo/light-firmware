@@ -1,0 +1,128 @@
+name: deploy
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+
+  create-windows-binaries:
+
+    env:
+      BINARY: light-firmware
+
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build light-firmware
+      run: |
+        cargo build --release
+
+    - name: Build package
+      id: package
+      shell: bash
+      run: |
+        ARCHIVE_TARGET="x86_64-pc-windows-msvc"
+        ARCHIVE_NAME="$BINARY-$ARCHIVE_TARGET"
+        ARCHIVE_FILE="${ARCHIVE_NAME}.zip"
+        7z a ${ARCHIVE_FILE} ./target/release/$BINARY.exe
+        echo "::set-output name=file::${ARCHIVE_FILE}"
+        echo "::set-output name=name::${ARCHIVE_NAME}.zip"
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.package.outputs.name }}
+        path: ${{ steps.package.outputs.file }}
+
+  create-unix-binaries:
+
+    env:
+      BINARY: light-firmware
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: macos-latest
+            target: x86_64-apple-darwin
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install musl
+      if: contains(matrix.target, 'linux-musl')
+      run: |
+        sudo apt-get install musl-tools
+
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        target: ${{ matrix.target }}
+
+    - name: Build light-firmware
+      run: |
+        cargo build --release --target ${{ matrix.target }}
+
+    - name: Build package
+      id: package
+      run: |
+        TAR_FILE=$BINARY-${{ matrix.target }}
+        cd target/${{ matrix.target }}/release
+        tar -czvf $GITHUB_WORKSPACE/$TAR_FILE.tar.gz $BINARY
+        echo ::set-output "name=file::${TAR_FILE}.tar.gz "
+        echo ::set-output "name=name::${TAR_FILE}"
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.package.outputs.name }}
+        path: ${{ steps.package.outputs.file }}
+
+
+  deploy:
+
+    needs: [create-windows-binaries, create-unix-binaries]
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Create Cargo.lock
+        run: |
+          cargo update
+
+      - name: Get version
+        id: tagName
+        run: |
+          VERSION=$(cargo pkgid | cut -d# -f2 | cut -d: -f2)
+          echo "::set-output name=tag::$VERSION"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./binaries
+
+      - name: Create a release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.tagName.outputs.tag }}
+          files: |
+            ./binaries/**/*.zip
+            ./binaries/**/*.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

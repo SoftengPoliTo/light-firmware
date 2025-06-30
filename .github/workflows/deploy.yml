@@ -72,13 +72,13 @@ jobs:
 
     - name: Build light-firmware
       run: |
-        cargo build --release --target ${{ matrix.target }}
+        cargo build --target ${{ matrix.target }}
 
     - name: Build package
       id: package
       run: |
         TAR_FILE=$BINARY-${{ matrix.target }}
-        cd target/${{ matrix.target }}/release
+        cd target/${{ matrix.target }}/debug
         tar -czvf $GITHUB_WORKSPACE/$TAR_FILE.tar.gz $BINARY
         echo ::set-output "name=file::${TAR_FILE}.tar.gz "
         echo ::set-output "name=name::${TAR_FILE}"

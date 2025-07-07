@@ -32,7 +32,8 @@ jobs:
           rust-code-analysis-cli --metrics -O json --pr -o "$HOME/rca-json" -p $PWD
 
       - name: Evaluate code quality
-        run: .github/scripts/main.sh
+        #run: .github/scripts/main.sh
+        run: python3 .github/scripts/script.py
 
       - name: Prepare Step 1 artifacts
         run: |

@@ -57,8 +57,8 @@ jobs:
     ################################ STEP 3: Manifest-Producer Analysis ################################
     - name: Build firmware statically with musl
       run: |
-        cargo build --release --target=x86_64-unknown-linux-musl
-        cp target/x86_64-unknown-linux-musl/release/light-firmware $HOME/elf_binary
+        cargo build --target=x86_64-unknown-linux-musl
+        cp target/x86_64-unknown-linux-musl/debug/light-firmware $HOME/elf_binary
 
     - name: Download and setup manifest-producer
       run: |
@@ -69,7 +69,7 @@ jobs:
     - name: Run manifest-producer analysis
       run: |
         cd $HOME
-        ./behaviour-assessment $HOME/work/light-firmware/light-firmware/target/x86_64-unknown-linux-musl/release/light-firmware
+        ./behaviour-assessment $HOME/elf_binary
         cp -r ./examples/results/light-firmware/* $HOME/final-artifacts/step3/ 2>/dev/null
         cp ./examples/results/light-firmware_checker.json $HOME/final-artifacts/step3/ 2>/dev/null
 

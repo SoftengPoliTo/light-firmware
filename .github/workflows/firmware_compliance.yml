@@ -5,83 +5,77 @@ on: [push, pull_request]
 jobs:
   complete-analysis:
     runs-on: ubuntu-latest
-
+    
     env:
       RCA_LINK: https://github.com/mozilla/rust-code-analysis/releases/download
       RCA_VERSION: v0.0.25
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-        # Setup dependencies for all steps
-      - name: Install system dependencies
-        run: |
-          sudo apt update
-          sudo apt install -y bc jq musl-dev musl-tools
+    # Setup dependencies for all steps
+    - name: Install system dependencies
+      run: |
+        sudo apt update
+        sudo apt install -y bc jq musl-dev musl-tools
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-unknown-linux-musl
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: x86_64-unknown-linux-musl
 
-      - name: Install rust-code-analysis
-        run: |
-          mkdir -p $HOME/.local/bin	
-          curl -L "$RCA_LINK/$RCA_VERSION/rust-code-analysis-linux-cli-x86_64.tar.gz" |
-          tar xz -C $HOME/.local/bin
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
+    - name: Install rust-code-analysis
+      run: |
+        mkdir -p $HOME/.local/bin	
+        curl -L "$RCA_LINK/$RCA_VERSION/rust-code-analysis-linux-cli-x86_64.tar.gz" |
+        tar xz -C $HOME/.local/bin
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-        # Initialize final artifacts directory
-      - name: Initialize artifacts directory
-        run: mkdir -p $HOME/final-artifacts/{step1,step2,step3}
+    # Initialize final artifacts directory
+    - name: Initialize artifacts directory
+      run: mkdir -p $HOME/final-artifacts/{step1,step2,step3}
 
+    ################################ STEP 1: Code Quality ################################
+    - name: Run rust-code-analysis
+      run: |
+        mkdir $HOME/rca-json
+        rust-code-analysis-cli --metrics -O json --pr -o "$HOME/rca-json" -p $PWD
 
-        ################################ STEP 1: Code Quality ################################
-      - name: Run rust-code-analysis
-        run: |
-          mkdir $HOME/rca-json
-          rust-code-analysis-cli --metrics -O json --pr -o "$HOME/rca-json" -p $PWD
+    - name: Evaluate code quality
+      run: python3 .github/scripts/script.py
 
-      - name: Evaluate code quality
-        run: python3 .github/scripts/script.py
+    - name: Collect Step 1 artifacts
+      run: |
+        cp -r $HOME/rca-json/* $HOME/final-artifacts/step1/
+        cp -r $HOME/code-quality-report/* $HOME/final-artifacts/step1/
 
-      - name: Collect Step 1 artifacts
-        run: |
-          cp -r $HOME/rca-json/* $HOME/final-artifacts/step1/ || echo "No RCA JSON files to copy"
-          cp -r $HOME/code-quality-report/* $HOME/final-artifacts/step1/ || echo "No code quality report files to copy"
+    ################################ STEP 2: Anomaly Detection ################################
+    - name: Run anomaly detection
+      run: |
+        echo "Anomaly Detection Report" > $HOME/final-artifacts/step2/anomaly-detection-report.txt
 
+    ################################ STEP 3: Manifest-Producer Analysis ################################
+    - name: Build firmware statically with musl
+      run: |
+        cargo build --release --target=x86_64-unknown-linux-musl
+        cp target/x86_64-unknown-linux-musl/release/light-firmware $HOME/elf_binary
 
-        ################################ STEP 2: Anomaly Detection ################################
-      - name: Run anomaly detection
-        run: |
-          echo "Anomaly Detection Report" > $HOME/final-artifacts/step2/anomaly-detection-report.txt
+    - name: Download and setup manifest-producer
+      run: |
+        cd $HOME
+        curl -L "https://github.com/SoftengPoliTo/manifest-producer/releases/latest/download/behaviour-assessment-x86_64-unknown-linux-gnu.tar.gz" | tar -xz
+        chmod +x behaviour-assessment
 
+    - name: Run manifest-producer analysis
+      run: |
+        cd $HOME
+        ./behaviour-assessment $HOME/work/light-firmware/light-firmware/target/x86_64-unknown-linux-musl/release/light-firmware
+        cp -r ./examples/results/light-firmware/* $HOME/final-artifacts/step3/ 2>/dev/null
+        cp ./examples/results/light-firmware_checker.json $HOME/final-artifacts/step3/ 2>/dev/null
 
-        ################################ STEP 3: Manifest-Producer Analysis ################################
-      - name: Build firmware statically with musl
-        run: |
-          cargo build --release --target=x86_64-unknown-linux-musl
-          cp target/x86_64-unknown-linux-musl/release/light-firmware $HOME/elf_binary
-
-      - name: Download and setup manifest-producer
-        run: |
-          cd $HOME
-          # Download the latest release
-          curl -L "https://github.com/SoftengPoliTo/manifest-producer/releases/latest/download/behaviour-assessment-x86_64-unknown-linux-gnu.tar.gz" | tar -xz
-          # Make it executable
-          chmod +x behaviour-assessment
-
-      - name: Run manifest-producer analysis
-        run: |
-          cd $HOME
-          ./behaviour-assessment $HOME/work/light-firmware/light-firmware/target/x86_64-unknown-linux-musl/release/light-firmware || echo "Failed to run manifest-producer, skipping step3 analysis"
-          # Copy results if they exist
-          cp -r ./examples/results/light-firmware/* $HOME/final-artifacts/step3/ 2>/dev/null || echo "No light-firmware results found, skipping copy"
-          cp ./examples/results/light-firmware_checker.json $HOME/final-artifacts/step3/ 2>/dev/null || echo "No light-firmware.json found, skipping copy"
-
-        # Upload final results
-      - name: Upload analysis results
-        uses: actions/upload-artifact@v4
-        with:
-          name: analysis-results
-          path: ~/final-artifacts/
+    # Upload final results
+    - name: Upload analysis results
+      uses: actions/upload-artifact@v4
+      with:
+        name: analysis-results
+        path: ~/final-artifacts/

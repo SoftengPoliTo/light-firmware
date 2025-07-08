@@ -69,9 +69,9 @@ jobs:
     - name: Run manifest-producer analysis
       run: |
         cd $HOME
-        ./behaviour-assessment $HOME/elf_binary
-        cp -r ./examples/results/light-firmware/* $HOME/final-artifacts/step3/ 2>/dev/null
-        cp ./examples/results/light-firmware_checker.json $HOME/final-artifacts/step3/ 2>/dev/null
+        ./behaviour-assessment ./elf_binary
+        cp -r .//results/light-firmware/* $HOME/final-artifacts/step3/ 2>/dev/null
+        cp ./results/light-firmware_checker.json $HOME/final-artifacts/step3/ 2>/dev/null
 
     # Upload final results
     - name: Upload analysis results

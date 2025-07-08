@@ -58,7 +58,7 @@ jobs:
     - name: Build firmware statically with musl
       run: |
         cargo build --target=x86_64-unknown-linux-musl
-        cp target/x86_64-unknown-linux-musl/debug/light-firmware $HOME/elf_binary
+        cp target/x86_64-unknown-linux-musl/debug/light-firmware $HOME/light-firmware
 
     - name: Download and setup manifest-producer
       run: |
@@ -70,7 +70,7 @@ jobs:
       run: |
         cd $HOME
         ./behaviour-assessment ./elf_binary
-        cp -r .//results/light-firmware/* $HOME/final-artifacts/step3/ 2>/dev/null
+        cp -r ./results/light-firmware/* $HOME/final-artifacts/step3/ 2>/dev/null
         cp ./results/light-firmware_checker.json $HOME/final-artifacts/step3/ 2>/dev/null
 
     # Upload final results

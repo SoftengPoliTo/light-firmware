@@ -40,15 +40,97 @@ def check_code_quality():
     except Exception as e:
          return "🔴", f"Error parsing code quality report: {str(e)}"
 
+
+def check_anomaly_detection():
+    """Check anomaly detection results and return semaphore status"""
+    home_dir = Path.home()
+    anomaly_file = home_dir / "final-artifacts" / "step2" / "anomaly-detection-report.txt"
+    
+    if not anomaly_file.exists():
+        return "🔴", "Anomaly detection report not found"
+
+    try:
+        with open(anomaly_file, 'r', encoding='utf-8') as file:
+            content = file.read().lower()
+
+        # Customize these checks based on your actual anomaly detection logic
+        if "critical" in content or "error" in content:
+            return "🔴", "Critical anomalies detected"
+        elif "warning" in content or "suspicious" in content:
+            return "🟡", "Potential anomalies detected"
+        elif "no anomalies" in content:
+            return "🟢", "No anomalies detected"
+        else:
+            return "🟡", "Anomaly detection completed with unknown status"
+
+    except Exception as e:
+        return "🔴", f"Error reading anomaly report: {str(e)}"
+
+
+def check_manifest_producer():
+    """Check manifest-producer results and return semaphore status"""
+    home_dir = Path.home()
+    results_dir = home_dir / "final-artifacts" / "step3"
+    json_dir = results_dir / "json"
+
+    if not results_dir.exists():
+        return "🔴", "Manifest analysis directory not found"
+
+    # Check presence of checker files
+    checker_files = list(results_dir.glob("*_checker.json"))
+    if not checker_files:
+        return "🔴", "No checker file found in manifest analysis"
+    
+    try:
+        # Use first checker file found
+        with open(checker_files[0], 'r', encoding='utf-8') as f:
+            checker_data = json.load(f)
+        
+        total_checks = 0
+        failed_checks = 0
+
+        for category in checker_data.get("categories", []):
+            for check in category.get("checks", []):
+                total_checks += 1
+                if not check.get("status", True):
+                    failed_checks += 1
+    
+        if total_checks == 0:
+            return "🔴", "No checks found in manifest checker file"
+
+        # Check for presence of at least 3 json files
+        json_files = list(json_dir.glob("*.json"))
+        json_file_count = len(json_files)
+
+        if failed_checks > 0:
+            status = "🔴" if failed_checks / total_checks >= 0.3 else "🟡"
+        else:
+            status = "🟢"
+
+        msg = f"{failed_checks}/{total_checks} checks failed"
+        if json_file_count < 3:
+            msg += f"; warning: only {json_file_count} JSON files found in directory"
+
+        return status, msg
+
+    except json.JSONDecodeError:
+        return "🔴", "Invalid JSON in manifest checker"
+    except Exception as e:
+        return "🔴", f"Error reading checker file: {str(e)}"
     
 def generate_final_report():
     """Generate final markdown report with semaphores for all sections"""
 
     print("🔍 Analyzing results from all steps...")
 
+    # Check each section
     code_quality_status, code_quality_msg = check_code_quality()
+    anomaly_status, anomaly_msg = check_anomaly_detection()
+    manifest_status, manifest_msg = check_manifest_producer()
 
     print(f"📊 Code Quality: {code_quality_status} - {code_quality_msg}")
+    print(f"🔍 Anomaly Detection: {anomaly_status} - {anomaly_msg}")
+    print(f"📋 Manifest Producer: {manifest_status} - {manifest_msg}")
 
     # Generate final report
     home_dir = Path.home()
@@ -58,7 +140,7 @@ def generate_final_report():
     final_report_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Calculate overall project status
-    all_statuses = [code_quality_status]
+    all_statuses = [code_quality_status, anomaly_status, manifest_status]
     if "🔴" in all_statuses:
         overall_status = "🔴"
         overall_message = "Critical issues found - Action required"
@@ -68,6 +150,11 @@ def generate_final_report():
     else:
         overall_status = "🟢"
         overall_message = "All checks passed successfully"
+
+    # Count files in each step for summary
+    step1_files = count_files_in_step(home_dir / "final-artifacts" / "step1")
+    step2_files = count_files_in_step(home_dir / "final-artifacts" / "step2")
+    step3_files = count_files_in_step(home_dir / "final-artifacts" / "step3")
 
     # Generate markdown report
     report_content = f"""# Firmware Compliance Analysis Report
@@ -84,6 +171,8 @@ def generate_final_report():
 | Section | Status | Message |
 |---------|--------|---------|
 | Code Quality | {code_quality_status} | {code_quality_msg} |
+| Anomaly Detection | {anomaly_status} | {anomaly_msg} |
+| Manifest Producer | {manifest_status} | {manifest_msg} |
 
 ---
 
@@ -95,6 +184,17 @@ def generate_final_report():
 - **Tool:** rust-code-analysis
 - **Metrics analyzed:** LOC, Cyclomatic Complexity, Maintainability Index, Halstead Effort
 - **Details:** Check `step1/` directory for detailed reports and JSON files
+
+### 2. Anomaly Detection {anomaly_status}
+- **Status:** {anomaly_status}
+- **Message:** {anomaly_msg}
+- **Details:** Check `step2/` directory for anomaly detection reports
+
+### 3. Manifest-Producer Analysis {manifest_status}
+- **Status:** {manifest_status}
+- **Message:** {manifest_msg}
+- **Tool:** behaviour-assessment
+- **Details:** Check `step3/` directory for manifest analysis results
 
 ---
 
@@ -125,7 +225,7 @@ final-artifacts/
 
 ## Recommendations
 
-{generate_recommendations(overall_status, code_quality_status)}
+{generate_recommendations(overall_status, code_quality_status, anomaly_status, manifest_status)}
 
 ---
 
@@ -152,7 +252,7 @@ This firmware analysis {'**PASSES**' if overall_status == '🟢' else '**REQUIRE
     return 0 if overall_status in ["🟢", "🟡"] else 1
 
 
-def generate_recommendations(code_quality_status):
+def generate_recommendations(overall_status, code_quality_status, anomaly_status, manifest_status):
     """Generate recommendations based on analysis results"""
     recommendations = []
 
@@ -160,6 +260,16 @@ def generate_recommendations(code_quality_status):
         recommendations.append("- **Code Quality**: Refactor functions with high complexity or low maintainability")
     elif code_quality_status == "🟡":
         recommendations.append("- **Code Quality**: Consider reviewing functions with warnings")
+
+    if anomaly_status == "🔴":
+        recommendations.append("- **Anomaly Detection**: Investigate critical anomalies before deployment")
+    elif anomaly_status == "🟡":
+        recommendations.append("- **Anomaly Detection**: Review potential anomalies for false positives")
+
+    if manifest_status == "🔴":
+        recommendations.append("- **Manifest Analysis**: Fix manifest-producer errors before proceeding")
+    elif manifest_status == "🟡":
+        recommendations.append("- **Manifest Analysis**: Review manifest-producer warnings and validate results")
 
     if not recommendations:
         recommendations.append("- **All systems**: Continue with standard deployment procedures")

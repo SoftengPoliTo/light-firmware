@@ -1,6 +1,14 @@
 name: firmware_compliance
 
-on: [push, pull_request]
+on: 
+  push: 
+    branches: [master]
+    tags:
+      - 'v*.*.*'
+
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize]
 
 jobs:
   complete-analysis:
@@ -73,9 +81,14 @@ jobs:
         cp -r ./results/light-firmware/* $HOME/final-artifacts/step3/ 2>/dev/null
         cp ./results/light-firmware_checker.json $HOME/final-artifacts/step3/ 2>/dev/null
 
+    ################################ STEP 4: Final Compliance Report ################################
+    - name: Run final compliance analysis
+      run: |
+        python3 .github/scripts/final_report.py
+
     # Upload final results
     - name: Upload analysis results
       uses: actions/upload-artifact@v4
       with:
-        name: analysis-results
+        name: firmware-compliance-analysis
         path: ~/final-artifacts/

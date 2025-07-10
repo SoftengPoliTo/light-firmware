@@ -54,6 +54,19 @@ is printed.
 Starting server...
 ```
 
+## Continuous Integration
+
+**Code Quality**
+
+https://github.com/user-attachments/assets/b51e0b8b-f60f-4922-82d1-b609f46e0cee
+
+
+**Manifest Producer**
+
+https://github.com/user-attachments/assets/b9393bf7-d749-4ec0-923d-ee547f3572d4
+
+
+
 <!-- Links -->
 [license]: https://github.com/SoftengPoliTo/light-firmware/blob/master/LICENSE
 
